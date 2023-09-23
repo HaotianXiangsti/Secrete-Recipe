@@ -165,8 +165,17 @@ def setup_logging(run_name):
     os.makedirs(os.path.join("models", run_name), exist_ok=True)
     os.makedirs(os.path.join("results", run_name), exist_ok=True)
 
+diffusion_para = config["Diffusion Parameter"]
+
+noise_steps = diffusion_para["noise_steps"]
+beta_start = diffusion_para["beta_start"]
+beta_end = diffusion_para["beta_end"]
+var_dim = diffusion_para["var_dim"]
+number_of_nodes = diffusion_para["number_of_nodes"]
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 class Diffusion:
-    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, node_number = 307, var_dim = 4, device="cpu"):
+    def __init__(self, noise_steps=noise_steps, beta_start=beta_start, beta_end=beta_end, node_number = number_of_nodes, var_dim = 4, device="cpu"):
         self.noise_steps = noise_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
@@ -236,8 +245,8 @@ val_envs = [5.5, 6.6]
 test_envs = [8]
 
 mse = nn.MSELoss()
-diffusion = Diffusion(noise_steps=1000, beta_start=1e-4, beta_end=0.02,
-                      var_dim=4, device=device)
+diffusion = Diffusion(noise_steps=noise_steps, beta_start=beta_start, beta_end=beta_end,
+                      var_dim=var_dim, device=device)
 
 adj_mx, distance_mx = get_adjacency_matrix(adj_filename, num_of_vertices, id_filename)
 
@@ -248,13 +257,24 @@ edge_index = from_scipy_sparse_matrix(sparse_adjacency_matrix)
 edge_index_info, _ = edge_index
 edge_index_info = edge_index_info.to(device)
 
+model_para = config["Diffusion Parameter"]
+
+time_dim = model_para["time_dim"]
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+input_shape = model_para["input_shape"]
+input_dim = model_para["input_dim"] #input_dim should equal to time_dime
+hidden_dim = model_para["hidden_dim"]
+output_dim = model_para["output_dim"]
+
 # create model
 mean_train, std_train = _mean, _std
-model = GCNModel(time_dim = 256, device = device, input_shape = 12,input_dim=256, hidden_dim=64, output_dim=4).to(device)
+model = GCNModel(time_dim = time_dim, device = device, input_shape = input_shape, input_dim=input_shape, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
 
 # optimizer
 optimizer = optim.AdamW(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,300,500], gamma=0.1)
+
+best_val_loss = float('inf')
 
 l = len(train_loader)
 
@@ -285,6 +305,21 @@ for epoch in range(number_of_epochs):
         logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
     scheduler.step()
+    model.eval()
+    with torch.no_grad():
+        val_loss = 0
+        for i, x in enumerate(val_loader):
+            encoder_inputs, labels = x
+            c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+            x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+            t = diffusion.sample_timesteps(x.shape[0]).to(device)
+            x_t, noise = diffusion.noise_images(x, t)
+            predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
+            loss = mse(noise, predicted_noise)
+            val_loss += loss
+
+        if val_loss < best_val_loss:
+            torch.save(model.state_dict(), os.path.join("models_graph", run_name, f"ckpt.pt"))
 
     # sample
     if epoch %10 ==0:
