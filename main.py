@@ -258,7 +258,9 @@ scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,
 
 l = len(train_loader)
 
-for epoch in range(2000):
+number_of_epochs = 2000
+
+for epoch in range(number_of_epochs):
     logging.info(f"Starting epoch {epoch}:")
     pbar = tqdm(train_loader)
     for i, x in enumerate(pbar):
