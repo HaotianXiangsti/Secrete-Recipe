@@ -2,4 +2,6 @@ The Secrete-Recipe.
 
 Two thing needs pip:
 
-pip install torch_geometric
+`pip install tensorboardX`
+
+`pip install torch_geometric`
