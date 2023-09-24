@@ -235,7 +235,7 @@ class Diffusion:
         model.train()
         return x, ground_truth
 
-run_name = "try_condition"
+run_name = str(training_config['run_name']) #"try_condition"
 setup_logging(run_name)
 logger = SummaryWriter(os.path.join("runs", run_name))
 
@@ -271,14 +271,14 @@ mean_train, std_train = _mean, _std
 model = GCNModel(time_dim = time_dim, device = device, input_shape = input_shape, input_dim=input_shape, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
 
 # optimizer
-optimizer = optim.AdamW(model.parameters(), lr=0.001)
+optimizer = optim.AdamW(model.parameters(), lr=0.001) # can use learning_rate in training section in the config to set the lr
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,300,500], gamma=0.1)
 
 best_val_loss = float('inf')
 
 l = len(train_loader)
 
-number_of_epochs = 2000
+number_of_epochs = int(training_config['epochs'])
 
 for epoch in range(number_of_epochs):
     logging.info(f"Starting epoch {epoch}:")
@@ -286,7 +286,7 @@ for epoch in range(number_of_epochs):
     for i, x in enumerate(pbar):
         encoder_inputs, labels  = x
         c = encoder_inputs[ :, :, :-1, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 3, 4 -> Batch_size, 172, 12
-        x = encoder_inputs[ :, :, -1:, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 1, 4 -> Batch_size, 172, 4
+        x = encoder_inputs[ :, :, -1:, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 1, 4 -> Batch_size, 172, 42
         t = diffusion.sample_timesteps(x.shape[0]).to(device)
         x_t, noise = diffusion.noise_images(x, t)
 
@@ -305,21 +305,24 @@ for epoch in range(number_of_epochs):
         logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
     scheduler.step()
-    model.eval()
-    with torch.no_grad():
-        val_loss = 0
-        for i, x in enumerate(val_loader):
-            encoder_inputs, labels = x
-            c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-            x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-            t = diffusion.sample_timesteps(x.shape[0]).to(device)
-            x_t, noise = diffusion.noise_images(x, t)
-            predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
-            loss = mse(noise, predicted_noise)
-            val_loss += loss
+    eval_flag = model_para["eval_flag"]
+    if eval_flag:
+        print("######## starting eval #########")
+        model.eval()
+        with torch.no_grad():
+            val_loss = 0
+            for i, x in enumerate(val_loader):
+                encoder_inputs, labels = x
+                c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+                x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+                t = diffusion.sample_timesteps(x.shape[0]).to(device)
+                x_t, noise = diffusion.noise_images(x, t)
+                predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
+                loss = mse(noise, predicted_noise)
+                val_loss += loss
 
-        if val_loss < best_val_loss:
-            torch.save(model.state_dict(), os.path.join("models_graph", run_name, f"ckpt.pt"))
+            if val_loss < best_val_loss:
+                torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
 
     # sample
     if epoch %10 ==0:
