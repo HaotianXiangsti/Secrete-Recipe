@@ -285,8 +285,8 @@ for epoch in range(number_of_epochs):
     pbar = tqdm(train_loader)
     for i, x in enumerate(pbar):
         encoder_inputs, labels  = x
-        c = encoder_inputs[ :, :, :-1, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1)
-        x = encoder_inputs[ :, :, -1:, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1)
+        c = encoder_inputs[ :, :, :-1, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 3, 4 -> Batch_size, 172, 12
+        x = encoder_inputs[ :, :, -1:, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 1, 4 -> Batch_size, 172, 4
         t = diffusion.sample_timesteps(x.shape[0]).to(device)
         x_t, noise = diffusion.noise_images(x, t)
 
