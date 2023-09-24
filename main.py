@@ -167,11 +167,11 @@ def setup_logging(run_name):
 
 diffusion_para = config["Diffusion Parameter"]
 
-noise_steps = diffusion_para["noise_steps"]
-beta_start = diffusion_para["beta_start"]
-beta_end = diffusion_para["beta_end"]
-var_dim = diffusion_para["var_dim"]
-number_of_nodes = diffusion_para["number_of_nodes"]
+noise_steps = int(diffusion_para["noise_steps"])
+beta_start = float(diffusion_para["beta_start"])
+beta_end = float(diffusion_para["beta_end"])
+var_dim = int(diffusion_para["var_dim"])
+number_of_nodes = int(diffusion_para["number_of_nodes"])
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Diffusion:
@@ -200,7 +200,7 @@ class Diffusion:
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
-    def sample(self, model, n, edge_index_info, ground_truth, c=None):
+    def sample(self, model, n, edge_index_info, ground_truth, path, c=None):
         logging.info(f"Sampling {n} new images....")
         model.eval()
         with torch.no_grad():
@@ -230,7 +230,8 @@ class Diffusion:
                 axis.hist(data[0,:,i], color='g', alpha=0.5, label="gen.")
                 axis.hist(data_re[0,:, i], color='r', alpha=0.5, label="true")
             plt.legend()
-            plt.show()
+            #plt.show()
+            plt.savefig(path)
 
         model.train()
         return x, ground_truth
@@ -257,18 +258,18 @@ edge_index = from_scipy_sparse_matrix(sparse_adjacency_matrix)
 edge_index_info, _ = edge_index
 edge_index_info = edge_index_info.to(device)
 
-model_para = config["Diffusion Parameter"]
+model_para = config["Model Parameter"]
 
-time_dim = model_para["time_dim"]
+time_dim = int(model_para["time_dim"])
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-input_shape = model_para["input_shape"]
-input_dim = model_para["input_dim"] #input_dim should equal to time_dime
-hidden_dim = model_para["hidden_dim"]
-output_dim = model_para["output_dim"]
+input_shape = int(model_para["input_shape"])
+input_dim = int(model_para["input_dim"]) #input_dim should equal to time_dime
+hidden_dim = int(model_para["hidden_dim"])
+output_dim = int(model_para["output_dim"])
 
 # create model
 mean_train, std_train = _mean, _std
-model = GCNModel(time_dim = time_dim, device = device, input_shape = input_shape, input_dim=input_shape, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
+model = GCNModel(time_dim = time_dim, device = device, input_shape = input_shape, input_dim = input_dim, hidden_dim = hidden_dim, output_dim = output_dim).to(device)
 
 # optimizer
 optimizer = optim.AdamW(model.parameters(), lr=0.001) # can use learning_rate in training section in the config to set the lr
@@ -323,11 +324,15 @@ for epoch in range(number_of_epochs):
 
             if val_loss < best_val_loss:
                 torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+                path = os.path.join("results", run_name, "best_ckpt_results.jpg")
+                sampled_data, ground_truth = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
+                                                              ground_truth = x, path = path, c = c)
 
     # sample
     if epoch %10 ==0:
         logging.info(f"lr = {scheduler.get_last_lr()[0]}")
-        sampled_data, ground_truth = diffusion.sample(model, n=x.shape[0], edge_index_info = edge_index_info, ground_truth = x, c=c)
+        path = os.path.join("results", run_name, f"{epoch}.jpg")
+        sampled_data, ground_truth = diffusion.sample(model, n=x.shape[0], edge_index_info = edge_index_info, ground_truth = x, path = path, c=c)
         #save_data(sampled_data, x, os.path.join("/content/IMAGE", run_name, f"{epoch}.jpg"))
         #torch.save(model.state_dict(), os.path.join("models_graph", run_name, f"ckpt.pt"))
 
