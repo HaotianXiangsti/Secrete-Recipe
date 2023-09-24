@@ -323,6 +323,7 @@ for epoch in range(number_of_epochs):
                 val_loss += loss
 
             if val_loss < best_val_loss:
+                best_val_loss = val_loss
                 torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
                 path = os.path.join("results", run_name, "best_ckpt_results.jpg")
                 sampled_data, ground_truth = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
