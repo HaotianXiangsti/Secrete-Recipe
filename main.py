@@ -236,6 +236,30 @@ class Diffusion:
         model.train()
         return x, ground_truth
 
+    def sample_train(self, model, n, edge_index_info, ground_truth, path, c=None):
+        logging.info(f"Sampling {n} new images....")
+        model.eval()
+        x = torch.randn((n, self.node_number, self.var_dim)).to(self.device)
+        for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
+                t = (torch.ones(n) * i).long().to(self.device)
+                if c is not None:
+                    input = torch.concat((c, x),-1)
+                predicted_noise = model(input, edge_index_info, t)
+                alpha = self.alpha[t][ : , None, None]
+                alpha_hat = self.alpha_hat[t][ : , None, None]
+                beta = self.beta[t][ : , None, None]
+                if i > 1:
+                    noise = torch.randn_like(x)
+                else:
+                    noise = torch.zeros_like(x)
+                x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
+        loss_sample = nn.MSELoss()(x, ground_truth)
+
+
+        model.train()
+
+        return loss_sample
+
 run_name = str(training_config['run_name']) #"try_condition"
 setup_logging(run_name)
 logger = SummaryWriter(os.path.join("runs", run_name))
@@ -281,6 +305,8 @@ l = len(train_loader)
 
 number_of_epochs = int(training_config['epochs'])
 
+epochs_starting_reconstruct_loss = int(training_config['epochs_starting_reconstruct_loss'])
+
 for epoch in range(number_of_epochs):
     logging.info(f"Starting epoch {epoch}:")
     pbar = tqdm(train_loader)
@@ -296,6 +322,13 @@ for epoch in range(number_of_epochs):
         loss_std = mse(pred_std, torch.ones_like(pred_std, device=device))
 
         loss = mse(noise, predicted_noise) #+ 5*loss_std - 0.5*diffusion.prior.log_prob(predicted_noise.float()).mean()
+
+        if epoch > epochs_starting_reconstruct_loss:
+            reconstruct_loss = diffusion.sample_train(model, n=x.shape[0], edge_index_info=edge_index_info,
+                                                          ground_truth=x, path=path, c=c)
+            loss += reconstruct_loss
+
+
 
         optimizer.zero_grad()
         loss.backward()
