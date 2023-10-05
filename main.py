@@ -240,7 +240,7 @@ run_name = str(training_config['run_name']) #"try_condition"
 setup_logging(run_name)
 logger = SummaryWriter(os.path.join("runs", run_name))
 
-device = torch.device("cuda")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 train_envs = [4,7]
 val_envs = [5.5, 6.6]
 test_envs = [8]
