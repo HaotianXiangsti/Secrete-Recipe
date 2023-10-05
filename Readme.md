@@ -16,3 +16,5 @@ PEMS04
 PEMS08
 
 `python main.py --config configurations/PEMS08_astgcn.conf` 
+
+Careful with config epochs_starting_reconstruct_loss, better set it into 10000 (a ver large number). Now calculating reconstructing loss may cause CUDA memeory exceed
