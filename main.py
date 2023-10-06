@@ -307,6 +307,8 @@ number_of_epochs = int(training_config['epochs'])
 
 epochs_starting_reconstruct_loss = int(training_config['epochs_starting_reconstruct_loss'])
 
+reconstruct_flag = training_config['reconstruct_flag']
+
 for epoch in range(number_of_epochs):
     logging.info(f"Starting epoch {epoch}:")
     pbar = tqdm(train_loader)
@@ -323,7 +325,7 @@ for epoch in range(number_of_epochs):
 
         loss = mse(noise, predicted_noise) #+ 5*loss_std - 0.5*diffusion.prior.log_prob(predicted_noise.float()).mean()
 
-        if epoch > epochs_starting_reconstruct_loss:
+        if epoch > epochs_starting_reconstruct_loss and reconstruct_flag == True:
             reconstruct_loss = diffusion.sample_train(model, n=x.shape[0], edge_index_info=edge_index_info,
                                                           ground_truth=x, path=path, c=c)
             loss += reconstruct_loss
