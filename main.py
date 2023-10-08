@@ -69,7 +69,7 @@ import numpy as np
 import argparse
 import configparser
 
-from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix
+from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix
 from Module import GCNModel
 
 

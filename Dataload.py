@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 
@@ -400,3 +401,12 @@ def get_adjacency_matrix(distance_df_filename, num_of_vertices, id_filename=None
                     A[i, j] = 1
                     distaneA[i, j] = distance
             return A, distaneA
+
+def process_safegraph_adjmatrix(adjmatrixfile_path):
+
+    df = pd.read_csv(adjmatrixfile_path,
+                     header=None)
+    # 提取数据并转换为NumPy数组
+    adj_mx = df.to_numpy()
+
+    return adj_mx
