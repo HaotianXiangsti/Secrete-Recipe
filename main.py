@@ -113,7 +113,7 @@ training_config = config['Training']
 
 adj_filename = data_config['adj_filename']
 graph_signal_matrix_filename = data_config['graph_signal_matrix_filename']
-adjmx_adds_on_file_path = str(data_config["adjmx_addson"])
+adjmx_adds_on_file_path = data_config["adjmx_addson"]
 if config.has_option('Data', 'id_filename'):
     id_filename = data_config['id_filename']
 else:
