@@ -113,6 +113,7 @@ training_config = config['Training']
 
 adj_filename = data_config['adj_filename']
 graph_signal_matrix_filename = data_config['graph_signal_matrix_filename']
+adjmx_adds_on_file_path = str(data_config["adjmx_addson"])
 if config.has_option('Data', 'id_filename'):
     id_filename = data_config['id_filename']
 else:
@@ -274,6 +275,9 @@ diffusion = Diffusion(noise_steps=noise_steps, beta_start=beta_start, beta_end=b
                       var_dim=var_dim, device=device)
 
 adj_mx, distance_mx = get_adjacency_matrix(adj_filename, num_of_vertices, id_filename)
+
+if dataset_name == "NYC":
+    adj_mx = process_safegraph_adjmatrix(adjmx_adds_on_file_path)
 
 from torch_geometric.utils import from_scipy_sparse_matrix
 import scipy.sparse

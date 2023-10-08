@@ -403,7 +403,6 @@ def get_adjacency_matrix(distance_df_filename, num_of_vertices, id_filename=None
             return A, distaneA
 
 def process_safegraph_adjmatrix(adjmatrixfile_path):
-
     df = pd.read_csv(adjmatrixfile_path,
                      header=None)
     # 提取数据并转换为NumPy数组
