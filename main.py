@@ -201,7 +201,7 @@ class Diffusion:
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
-    def sample(self, model, n, edge_index_info, ground_truth, path, c=None):
+    def sample(self, model, n, edge_index_info, ground_truth, path, c=None, fid_flag = False):
         logging.info(f"Sampling {n} new images....")
         model.eval()
         with torch.no_grad():
@@ -219,7 +219,10 @@ class Diffusion:
                 else:
                     noise = torch.zeros_like(x)
                 x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
-            loss_sample = nn.MSELoss()(x, ground_truth)
+            if fid_flag == True:
+                loss_sample = calculate_fid(x, ground_truth)
+            else:
+                loss_sample = nn.MSELoss()(x, ground_truth)
             print(loss_sample.item())
             encoder_input = x.detach().cpu().numpy()
             data = encoder_input
@@ -235,7 +238,7 @@ class Diffusion:
             plt.savefig(path)
 
         model.train()
-        return x, ground_truth
+        return x, ground_truth, loss_sample
 
     def sample_train(self, model, n, edge_index_info, ground_truth, path, c=None):
         logging.info(f"Sampling {n} new images....")
@@ -260,6 +263,32 @@ class Diffusion:
         model.train()
 
         return loss_sample
+
+import numpy as np
+from scipy.linalg import sqrtm
+
+def calculate_fid(features_group1, features_group2):
+
+    # 计算特征表示的均值和协方差
+    features_group1 = features_group1.detach().cpu().numpy().reshape(features_group1.shape[0], -1)
+    features_group2 = features_group2.detach().cpu().numpy().reshape(features_group2.shape[0], -1)
+    mean_group1 = np.mean(features_group1, axis=0)
+    cov_matrix_group1 = np.cov(features_group1, rowvar=False)
+
+    mean_group2 = np.mean(features_group2, axis=0)
+    cov_matrix_group2 = np.cov(features_group2, rowvar=False)
+
+    # 计算协方差的平方根
+    print(cov_matrix_group1.shape)
+    print(cov_matrix_group2.shape)
+    sqrt_cov_product = sqrtm(np.dot(cov_matrix_group1, cov_matrix_group2))
+
+    # 计算FID距离
+    fid = np.linalg.norm(mean_group1 - mean_group2) + np.trace(cov_matrix_group1 + cov_matrix_group2 - 2 * sqrt_cov_product)
+    fid = torch.tensor(fid)
+    fid = fid.to(device).float().requires_grad_(True)
+
+    return fid
 
 run_name = str(training_config['run_name']) #"try_condition"
 setup_logging(run_name)
@@ -305,6 +334,8 @@ scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,
 
 best_val_loss = float('inf')
 
+best_rec_loss = float('inf')
+
 l = len(train_loader)
 
 number_of_epochs = int(training_config['epochs'])
@@ -312,6 +343,8 @@ number_of_epochs = int(training_config['epochs'])
 epochs_starting_reconstruct_loss = int(training_config['epochs_starting_reconstruct_loss'])
 
 reconstruct_flag = training_config['reconstruct_flag']
+
+fid_flag = training_config['fid_flag']
 
 for epoch in range(number_of_epochs):
     logging.info(f"Starting epoch {epoch}:")
@@ -363,16 +396,20 @@ for epoch in range(number_of_epochs):
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+
                 path = os.path.join("results", run_name, "best_ckpt_results.jpg")
-                sampled_data, ground_truth = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
-                                                              ground_truth = x, path = path, c = c)
+                sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
+                                                              ground_truth = x, path = path, c = c, fid_flag = fid_flag)
+                if loss_recon < best_rec_loss:
+                    best_rec_loss = loss_recon
+                    print("######## saving ckpt #########")
+                    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
 
     # sample
     if epoch %10 ==0:
         logging.info(f"lr = {scheduler.get_last_lr()[0]}")
         path = os.path.join("results", run_name, f"{epoch}.jpg")
-        sampled_data, ground_truth = diffusion.sample(model, n=x.shape[0], edge_index_info = edge_index_info, ground_truth = x, path = path, c=c)
+        sampled_data, ground_truth, loss_sample = diffusion.sample(model, n=x.shape[0], edge_index_info = edge_index_info, ground_truth = x, path = path, c=c, fid_flag = fid_flag)
         #save_data(sampled_data, x, os.path.join("/content/IMAGE", run_name, f"{epoch}.jpg"))
         #torch.save(model.state_dict(), os.path.join("models_graph", run_name, f"ckpt.pt"))
 

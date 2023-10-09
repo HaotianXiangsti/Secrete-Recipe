@@ -409,3 +409,4 @@ def process_safegraph_adjmatrix(adjmatrixfile_path):
     adj_mx = df.to_numpy()
 
     return adj_mx
+
