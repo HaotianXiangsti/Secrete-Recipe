@@ -19,7 +19,9 @@ PEMS08
 
 SafeGraph
 
-`python main.py --config configurations/NYC_new_astgcn.conf` 
+`python main.py --config configurations/NYC_new_astgcn.conf`
+
+========================================================
 
 Evaluation for PEMS04
 
