@@ -69,7 +69,7 @@ import numpy as np
 import argparse
 import configparser
 
-from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix
+from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation
 from Module import GCNModel
 
 
@@ -156,15 +156,17 @@ params_path = os.path.join('experiments', dataset_name, folder_dir)
 print('params_path:', params_path)
 
 
-train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, _mean, _std = load_graphdata_channel1(
+train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, _mean, _std = load_graphdata_channel_evaluation(
     graph_signal_matrix_filename, num_of_hours,
     num_of_days, num_of_weeks, DEVICE, batch_size)
 
 def setup_logging(run_name):
     os.makedirs("models", exist_ok=True)
     os.makedirs("results", exist_ok=True)
+    os.makedirs("evaluation", exist_ok=True)
     os.makedirs(os.path.join("models", run_name), exist_ok=True)
     os.makedirs(os.path.join("results", run_name), exist_ok=True)
+    os.makedirs(os.path.join("evaluation", run_name), exist_ok=True)
 
 diffusion_para = config["Diffusion Parameter"]
 
@@ -330,6 +332,12 @@ model = GCNModel(time_dim = time_dim, device = device, input_shape = input_shape
 optimizer = optim.AdamW(model.parameters(), lr=0.001) # can use learning_rate in training section in the config to set the lr
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,200,300,500], gamma=0.1)
 
+ckpt = torch.load(os.path.join("models", run_name, f"ckpt.pt"))
+
+
+
+model.load_state_dict(ckpt)
+
 best_val_loss = float('inf')
 
 best_rec_loss = float('inf')
@@ -344,73 +352,21 @@ reconstruct_flag = training_config['reconstruct_flag']
 
 fid_flag = training_config['fid_flag']
 
-for epoch in range(number_of_epochs):
-    logging.info(f"Starting epoch {epoch}:")
-    pbar = tqdm(train_loader)
-    for i, x in enumerate(pbar):
-        encoder_inputs, labels  = x
-        c = encoder_inputs[ :, :, :-1, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 3, 4 -> Batch_size, 172, 12
-        x = encoder_inputs[ :, :, -1:, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 1, 4 -> Batch_size, 172, 42
+model.eval()
+with torch.no_grad():
+
+    # For evaluation I change the data loading method, train_loader contains all 83 weeks and test_loader is never used in train and test
+
+    val_loss = 0
+    for i, x in enumerate(train_loader):
+        encoder_inputs, labels = x
+        c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+        x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+        print(x.shape)
         t = diffusion.sample_timesteps(x.shape[0]).to(device)
         x_t, noise = diffusion.noise_images(x, t)
-
-        predicted_noise = model(torch.concat((c, x_t),-1), edge_index_info, t)
-        pred_std = torch.std(predicted_noise, dim=0)
-        loss_std = mse(pred_std, torch.ones_like(pred_std, device=device))
-
-        loss = mse(noise, predicted_noise) #+ 5*loss_std - 0.5*diffusion.prior.log_prob(predicted_noise.float()).mean()
-
-        if epoch > epochs_starting_reconstruct_loss and reconstruct_flag == True:
-            reconstruct_loss = diffusion.sample_train(model, n=x.shape[0], edge_index_info=edge_index_info,
-                                                          ground_truth=x, path=path, c=c)
-            loss += reconstruct_loss
-
-
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        pbar.set_postfix(MSE=loss.item())
-
-        logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
-
-    scheduler.step()
-    eval_flag = model_para["eval_flag"]
-    if eval_flag:
-        print("######## starting eval #########")
-        model.eval()
-        with torch.no_grad():
-            val_loss = 0
-            for i, x in enumerate(val_loader):
-                encoder_inputs, labels = x
-                c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-                x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-                t = diffusion.sample_timesteps(x.shape[0]).to(device)
-                x_t, noise = diffusion.noise_images(x, t)
-                predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
-                loss = mse(noise, predicted_noise)
-                val_loss += loss
-
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-
-                path = os.path.join("results", run_name, "best_ckpt_results.jpg")
-                sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
+        predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
+        path = "evaluation/"+run_name+"/best_ckpt_results.jpg"
+        sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
                                                               ground_truth = x, path = path, c = c, fid_flag = fid_flag)
-                '''
-                if loss_recon < best_rec_loss:
-                    best_rec_loss = loss_recon
-                '''
-                print("######## saving ckpt #########")
-                torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
-
-    # sample
-    if epoch %10 ==0:
-        logging.info(f"lr = {scheduler.get_last_lr()[0]}")
-        path = os.path.join("results", run_name, f"{epoch}.jpg")
-        sampled_data, ground_truth, loss_sample = diffusion.sample(model, n=x.shape[0], edge_index_info = edge_index_info, ground_truth = x, path = path, c=c, fid_flag = fid_flag)
-        #save_data(sampled_data, x, os.path.join("/content/IMAGE", run_name, f"{epoch}.jpg"))
-        #torch.save(model.state_dict(), os.path.join("models_graph", run_name, f"ckpt.pt"))
-
 
