@@ -362,11 +362,10 @@ with torch.no_grad():
         encoder_inputs, labels = x
         c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
         x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-        print(x.shape)
         t = diffusion.sample_timesteps(x.shape[0]).to(device)
         x_t, noise = diffusion.noise_images(x, t)
         predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
-        path = "evaluation/"+run_name+"/best_ckpt_results.jpg"
+        path = "evaluation/"+run_name+"/results"+str(i)+".jpg"
         sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
                                                               ground_truth = x, path = path, c = c, fid_flag = fid_flag)
 
