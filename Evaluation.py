@@ -69,7 +69,7 @@ import numpy as np
 import argparse
 import configparser
 
-from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation
+from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation, read_and_generate_dataset_aug
 from Module import GCNModel
 
 
@@ -369,4 +369,15 @@ with torch.no_grad():
         path = "evaluation/"+run_name+"/results"+str(i)+".jpg"
         sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
                                                               ground_truth = x, path = path, c = c, fid_flag = fid_flag)
+    generated_flag = True
+    number_envs = 3
 
+    if generated_flag == True:
+
+        os.makedirs("aug", exist_ok=True)
+        os.makedirs(os.path.join("aug", run_name), exist_ok=True)
+
+        for i in range(number_envs):
+            aug_path = "aug/"+run_name+"/environment"+str(i)+".npz"
+            np.savez(aug_path, data = sampled_data.detach().cpu().numpy())
+            read_and_generate_dataset_aug(aug_path, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True, env_number = number_envs)
