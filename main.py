@@ -303,9 +303,11 @@ diffusion = Diffusion(noise_steps=noise_steps, beta_start=beta_start, beta_end=b
 
 adj_mx, distance_mx = get_adjacency_matrix(adj_filename, num_of_vertices, id_filename)
 
+'''
 if dataset_name == "NYC":
     adjmx_adds_on_file_path = data_config["adjmx_addson"]
     adj_mx = process_safegraph_adjmatrix(adjmx_adds_on_file_path)
+'''
 
 from torch_geometric.utils import from_scipy_sparse_matrix
 import scipy.sparse
