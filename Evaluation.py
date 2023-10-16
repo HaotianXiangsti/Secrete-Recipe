@@ -106,7 +106,11 @@ graph_signal_matrix_filename = data_config['graph_signal_matrix_filename']
 data = np.load(graph_signal_matrix_filename)
 data['data'].shape
 
-all_data = read_and_generate_dataset(graph_signal_matrix_filename, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True)
+if dataset_name == "NYC":
+    perciption_file_path = data_config["perciption_csv"]
+
+else:
+    all_data = read_and_generate_dataset(graph_signal_matrix_filename, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True)
 
 data_config = config['Data']
 training_config = config['Training']
@@ -305,9 +309,7 @@ diffusion = Diffusion(noise_steps=noise_steps, beta_start=beta_start, beta_end=b
 
 adj_mx, distance_mx = get_adjacency_matrix(adj_filename, num_of_vertices, id_filename)
 
-if dataset_name == "NYC":
-    adjmx_adds_on_file_path = data_config["adjmx_addson"]
-    adj_mx = process_safegraph_adjmatrix(adjmx_adds_on_file_path)
+
 
 from torch_geometric.utils import from_scipy_sparse_matrix
 import scipy.sparse
@@ -359,25 +361,29 @@ with torch.no_grad():
     # For evaluation I change the data loading method, train_loader contains all 83 weeks and test_loader is never used in train and test
 
     val_loss = 0
-    for i, x in enumerate(train_loader):
-        encoder_inputs, labels = x
-        c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-        x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-        t = diffusion.sample_timesteps(x.shape[0]).to(device)
-        x_t, noise = diffusion.noise_images(x, t)
-        predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
-        path = "evaluation/"+run_name+"/results"+str(i)+".jpg"
-        sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
-                                                              ground_truth = x, path = path, c = c, fid_flag = fid_flag)
     generated_flag = True
-    number_envs = 3
+    number_envs = 6
+    condtion_list = [0.25, 0.5, 1, 1.25, 1.5, 2]
+    for s in range(number_envs):
+        for i, x in enumerate(train_loader):
+            encoder_inputs, labels = x
+            c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+            x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+            t = diffusion.sample_timesteps(x.shape[0]).to(device)
+            c[:,:,-1:] = c[:,:,-1:] * condtion_list[s]
+            x_t, noise = diffusion.noise_images(x, t)
+            predicted_noise = model(torch.concat((c, x_t), -1), edge_index_info, t)
+            path = "evaluation/"+run_name+"/results"+str(i)+".jpg"
+            sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
+                                                                  ground_truth = x, path = path, c = c, fid_flag = fid_flag)
 
-    if generated_flag == True:
 
-        os.makedirs("aug", exist_ok=True)
-        os.makedirs(os.path.join("aug", run_name), exist_ok=True)
+        if generated_flag == True:
 
-        for i in range(number_envs):
-            aug_path = "aug/"+run_name+"/environment"+str(i)+".npz"
+            os.makedirs("aug", exist_ok=True)
+            os.makedirs(os.path.join("aug", run_name), exist_ok=True)
+
+
+            aug_path = "aug/"+run_name+"/environment"+str(s)+".npz"
             np.savez(aug_path, data = sampled_data.detach().cpu().numpy())
-            read_and_generate_dataset_aug(aug_path, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True, env_number = number_envs)
+            read_and_generate_dataset_aug(aug_path, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True, env_number = s)

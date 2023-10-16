@@ -106,7 +106,11 @@ graph_signal_matrix_filename = data_config['graph_signal_matrix_filename']
 data = np.load(graph_signal_matrix_filename)
 data['data'].shape
 
-all_data = read_and_generate_dataset(graph_signal_matrix_filename, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True)
+if dataset_name == "NYC":
+    perciption_file_path = data_config["perciption_csv"]
+
+else:
+    all_data = read_and_generate_dataset(graph_signal_matrix_filename, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True)
 
 data_config = config['Data']
 training_config = config['Training']
@@ -303,11 +307,10 @@ diffusion = Diffusion(noise_steps=noise_steps, beta_start=beta_start, beta_end=b
 
 adj_mx, distance_mx = get_adjacency_matrix(adj_filename, num_of_vertices, id_filename)
 
-'''
-if dataset_name == "NYC":
-    adjmx_adds_on_file_path = data_config["adjmx_addson"]
-    adj_mx = process_safegraph_adjmatrix(adjmx_adds_on_file_path)
-'''
+
+
+
+
 
 from torch_geometric.utils import from_scipy_sparse_matrix
 import scipy.sparse

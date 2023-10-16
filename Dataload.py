@@ -397,6 +397,141 @@ def read_and_generate_dataset_aug(graph_signal_matrix_filename,
                             )
     return all_data
 
+
+def read_and_generate_dataset_SafeGraph(graph_signal_matrix_filename, percption_path,
+                              num_of_weeks, num_of_days,
+                              num_of_hours, num_for_predict,
+                              points_per_hour=12, save=False):
+    '''
+    Parameters
+    ----------
+    graph_signal_matrix_filename: str, path of graph signal matrix file
+    num_of_weeks, num_of_days, num_of_hours: int
+    num_for_predict: int
+    points_per_hour: int, default 12, depends on data
+
+    Returns
+    ----------
+    feature: np.ndarray,
+             shape is (num_of_samples, num_of_depend * points_per_hour,
+                       num_of_vertices, num_of_features)
+    target: np.ndarray,
+            shape is (num_of_samples, num_of_vertices, num_for_predict)
+    '''
+    data_seq = np.load(graph_signal_matrix_filename)['data']  # (sequence_length, num_of_vertices, num_of_features)
+    perciption = pd.read_csv(percption_path, header = 0).to_numpy()
+
+    all_samples = []
+    for idx in range(data_seq.shape[0]):
+        sample = get_sample_indices(data_seq, num_of_weeks, num_of_days,
+                                    num_of_hours, idx, num_for_predict,
+                                    points_per_hour)
+        if ((sample[0] is None) and (sample[1] is None) and (sample[2] is None)):
+            continue
+
+        week_sample, day_sample, hour_sample, target = sample
+
+        sample = []  # [(week_sample),(day_sample),(hour_sample),target,time_sample]
+
+        if num_of_weeks > 0:
+            week_sample = np.expand_dims(week_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+            sample.append(week_sample)
+
+        if num_of_days > 0:
+            day_sample = np.expand_dims(day_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+            sample.append(day_sample)
+
+        if num_of_hours > 0:
+            hour_sample = np.expand_dims(hour_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+            sample.append(hour_sample)
+
+        target = np.expand_dims(target, axis=0).transpose((0, 2, 3, 1))[:, :, 0, :]  # (1,N,T)
+        sample.append(target)
+
+        time_sample = np.expand_dims(np.array([idx]), axis=0)  # (1,1)
+        sample.append(time_sample)
+
+        all_samples.append(
+            sample)  # sampe：[(week_sample),(day_sample),(hour_sample),target,time_sample] = [(1,N,F,Tw),(1,N,F,Td),(1,N,F,Th),(1,N,Tpre),(1,1)]
+
+    split_line1 = int(len(all_samples) * 0.6)
+    split_line2 = int(len(all_samples) * 0.8)
+
+    training_set = [np.concatenate(i, axis=0)
+                    for i in zip(*all_samples[:split_line1])]  # [(B,N,F,Tw),(B,N,F,Td),(B,N,F,Th),(B,N,Tpre),(B,1)]
+    validation_set = [np.concatenate(i, axis=0)
+                      for i in zip(*all_samples[split_line1: split_line2])]
+    testing_set = [np.concatenate(i, axis=0)
+                   for i in zip(*all_samples[split_line2:])]
+
+    train_x = np.concatenate(training_set[:-2], axis=-1)  # (B,N,F,T')
+    val_x = np.concatenate(validation_set[:-2], axis=-1)
+    test_x = np.concatenate(testing_set[:-2], axis=-1)
+
+    train_target = training_set[-2]  # (B,N,T)
+    val_target = validation_set[-2]
+    test_target = testing_set[-2]
+
+    train_timestamp = training_set[-1]  # (B,1)
+    val_timestamp = validation_set[-1]
+    test_timestamp = testing_set[-1]
+
+    (stats, train_x_norm, val_x_norm, test_x_norm) = normalization(train_x, val_x, test_x)
+
+    all_data = {
+        'train': {
+            'x': train_x_norm,
+            'target': train_target,
+            'timestamp': train_timestamp,
+        },
+        'val': {
+            'x': val_x_norm,
+            'target': val_target,
+            'timestamp': val_timestamp,
+        },
+        'test': {
+            'x': test_x_norm,
+            'target': test_target,
+            'timestamp': test_timestamp,
+        },
+        'stats': {
+            '_mean': stats['_mean'],
+            '_std': stats['_std'],
+        }
+    }
+    print('train x:', all_data['train']['x'].shape)
+    print('train target:', all_data['train']['target'].shape)
+    print('train timestamp:', all_data['train']['timestamp'].shape)
+    print()
+    print('val x:', all_data['val']['x'].shape)
+    print('val target:', all_data['val']['target'].shape)
+    print('val timestamp:', all_data['val']['timestamp'].shape)
+    print()
+    print('test x:', all_data['test']['x'].shape)
+    print('test target:', all_data['test']['target'].shape)
+    print('test timestamp:', all_data['test']['timestamp'].shape)
+    print()
+    print('train data _mean :', stats['_mean'].shape, stats['_mean'])
+    print('train data _std :', stats['_std'].shape, stats['_std'])
+
+    if save:
+        file = os.path.basename(graph_signal_matrix_filename).split('.')[0]
+        dirpath = os.path.dirname(graph_signal_matrix_filename)
+        filename = os.path.join(dirpath, file + '_r' + str(num_of_hours) + '_d' + str(num_of_days) + '_w' + str(
+            num_of_weeks)) + '_astcgn'
+        print('save file:', filename)
+        np.savez_compressed(filename,
+                            train_x=all_data['train']['x'], train_target=all_data['train']['target'],
+                            train_timestamp=all_data['train']['timestamp'],
+                            val_x=all_data['val']['x'], val_target=all_data['val']['target'],
+                            val_timestamp=all_data['val']['timestamp'],
+                            test_x=all_data['test']['x'], test_target=all_data['test']['target'],
+                            test_timestamp=all_data['test']['timestamp'],
+                            mean=all_data['stats']['_mean'], std=all_data['stats']['_std']
+                            )
+    return all_data
+
+
 def load_graphdata_channel1(graph_signal_matrix_filename, num_of_hours, num_of_days, num_of_weeks, DEVICE, batch_size, shuffle=True):
     '''
     这个是为PEMS的数据准备的函数
