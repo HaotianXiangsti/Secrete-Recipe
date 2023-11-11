@@ -71,6 +71,7 @@ import configparser
 
 from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix
 from Module import GCNModel
+from model.ASTGCN_r import make_model
 
 
 # prepare dataset
@@ -159,7 +160,47 @@ print('folder_dir:', folder_dir)
 params_path = os.path.join('experiments', dataset_name, folder_dir)
 print('params_path:', params_path)
 
+# Check Repeated Parameters
+
+num_of_vertices = int(data_config['num_of_vertices'])
+points_per_hour = int(data_config['points_per_hour'])
+num_for_predict = int(data_config['num_for_predict'])
+dataset_name = data_config['dataset_name']
+model_name = training_config['model_name']
+learning_rate = float(training_config['learning_rate'])
+start_epoch = int(training_config['start_epoch'])
+epochs = int(training_config['epochs'])
+fine_tune_epochs = int(training_config['fine_tune_epochs'])
+print('total training epoch, fine tune epoch:', epochs, ',' , fine_tune_epochs, flush=True)
+batch_size = int(training_config['batch_size'])
+print('batch_size:', batch_size, flush=True)
+num_of_weeks = int(training_config['num_of_weeks'])
+num_of_days = int(training_config['num_of_days'])
+num_of_hours = int(training_config['num_of_hours'])
+direction = int(training_config['direction'])
+encoder_input_size = int(training_config['encoder_input_size'])
+decoder_input_size = int(training_config['decoder_input_size'])
+dropout = float(training_config['dropout'])
+kernel_size = int(training_config['kernel_size'])
+
+filename_npz = os.path.join(dataset_name + '_r' + str(num_of_hours) + '_d' + str(num_of_days) + '_w' + str(num_of_weeks)) + '.npz'
+num_layers = int(training_config['num_layers'])
+d_model = int(training_config['d_model'])
+nb_head = int(training_config['nb_head'])
+ScaledSAt = bool(int(training_config['ScaledSAt']))  # whether use spatial self attention
+SE = bool(int(training_config['SE']))  # whether use spatial embedding
+smooth_layer_num = int(training_config['smooth_layer_num'])
+aware_temporal_context = bool(int(training_config['aware_temporal_context']))
+TE = bool(int(training_config['TE']))
+use_LayerNorm = True
+residual_connection = True
 
 train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, _mean, _std = load_graphdata_channel1(
     graph_signal_matrix_filename, num_of_hours,
     num_of_days, num_of_weeks, DEVICE, batch_size)
+
+adj_mx, distance_mx = get_adjacency_matrix(adj_filename, num_of_vertices, id_filename)
+
+net = make_model(DEVICE, num_layers, encoder_input_size, decoder_input_size, d_model, adj_mx, nb_head, num_of_weeks,  num_of_days, num_of_hours, points_per_hour, num_for_predict, dropout=dropout, aware_temporal_context=aware_temporal_context, ScaledSAt=ScaledSAt, SE=SE, TE=TE, kernel_size=kernel_size, smooth_layer_num=smooth_layer_num, residual_connection=residual_connection, use_LayerNorm=use_LayerNorm)
+
+print(net, flush=True)
