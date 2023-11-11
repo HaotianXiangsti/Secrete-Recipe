@@ -291,9 +291,16 @@ def train_main():
 
         if val_loss < best_val_loss:
 
-            if os.path.exists(params_filename):
-                os.remove(params_filename)
-                print('Deleted old parameters file: %s' % params_filename)
+            files = os.listdir(params_path)
+
+            # 遍历文件夹中的文件
+            for filename in files:
+                if filename.endswith('.params'):
+                    # 构建文件的完整路径
+                    file_path = os.path.join(params_path, filename)
+
+                    # 删除文件
+                    os.remove(file_path)
 
             best_val_loss = val_loss
             best_epoch = epoch
