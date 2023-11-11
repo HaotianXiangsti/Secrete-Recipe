@@ -290,6 +290,11 @@ def train_main():
 
 
         if val_loss < best_val_loss:
+
+            if os.path.exists(params_filename):
+                os.remove(params_filename)
+                print('Deleted old parameters file: %s' % params_filename)
+
             best_val_loss = val_loss
             best_epoch = epoch
             torch.save(net.state_dict(), params_filename)
