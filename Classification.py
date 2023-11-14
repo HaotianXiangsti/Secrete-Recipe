@@ -69,7 +69,7 @@ import numpy as np
 import argparse
 import configparser
 
-from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation, read_and_generate_dataset_aug
+from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation, read_and_generate_dataset_aug, load_graphdata_channel_aug
 from Module import GCNModel
 from model.ASTGCN_r import make_model
 
@@ -219,7 +219,7 @@ for s in range(number_envs):
     aug_path = "aug/" + run_name + "/environment" + str(s) + ".npz"
     read_and_generate_dataset_aug(aug_path, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour,
                                   save=True, env_number=s)
-    train_loader_aug, _, _, _, _, _, _, _ = load_graphdata_channel1(
+    train_loader_aug, _, _, _, _, _, _, _ = load_graphdata_channel_aug(
         aug_path, num_of_hours,
         num_of_days, num_of_weeks, DEVICE, batch_size)
 
