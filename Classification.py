@@ -69,7 +69,7 @@ import numpy as np
 import argparse
 import configparser
 
-from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix
+from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation, read_and_generate_dataset_aug
 from Module import GCNModel
 from model.ASTGCN_r import make_model
 
@@ -217,6 +217,18 @@ number_envs = int(training_config['number_envs'])
 for s in range(number_envs):
 
     aug_path = "aug/" + run_name + "/environment" + str(s) + ".npz"
+    read_and_generate_dataset_aug(aug_path, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour,
+                                  save=True, env_number=s)
+    train_loader_aug, _, _, _, _, _, _, _ = load_graphdata_channel1(
+        aug_path, num_of_hours,
+        num_of_days, num_of_weeks, DEVICE, batch_size)
+
+    dataset_name = f'dataset_{s + 1}'
+
+    train_aug_loader_dict[dataset_name] = train_loader_aug
+
+
+
 
 
 
@@ -374,6 +386,30 @@ def train_main():
                 loss = criterion_masked(outputs, labels,missing_value)
             else :
                 loss = criterion(outputs, labels)
+
+            aug = False
+            irm_calculation = IRM_Calculation(l2_weights, criterion, 1)
+            # loss=irm_calculation.IRM(outputs,labels,net)
+
+            if aug:
+
+                loss_aug_list =list()
+                for s in len(train_aug_loader_dict):
+
+                    dataset_name = f'dataset_{s + 1}'
+
+                    train_loader_aug = train_aug_loader_dict[dataset_name]
+
+                    for batch_index_aug, batch_data_aug in enumerate(train_loader_aug):
+
+                        encoder_inputs_aug, labels_aug = batch_data_aug
+                        outputs_aug, loss_aug = aug_train(encoder_inputs_aug, labels_aug, missing_value,masked_flag, criterion)
+                        loss_aug = irm_calculation.IRM(outputs_aug, labels_aug, net)
+                        loss_aug_list.append(loss_aug)
+
+                loss = loss + sum(loss_aug_list)
+
+
 
 
             loss.backward()
