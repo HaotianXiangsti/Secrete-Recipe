@@ -221,7 +221,7 @@ for s in range(number_envs):
                                   save=True, env_number=s)
     train_loader_aug, _, _, _, _, _, _, _ = load_graphdata_channel_aug(
         aug_path, num_of_hours,
-        num_of_days, num_of_weeks, DEVICE, batch_size, number_envs)
+        num_of_days, num_of_weeks, DEVICE, batch_size, env_number = s)
 
     dataset_name = f'dataset_{s + 1}'
 
@@ -394,7 +394,7 @@ def train_main():
             if aug:
 
                 loss_aug_list =list()
-                for s in len(train_aug_loader_dict):
+                for s in range(len(train_aug_loader_dict)):
 
                     dataset_name = f'dataset_{s + 1}'
 
