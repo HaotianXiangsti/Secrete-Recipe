@@ -208,6 +208,36 @@ net = make_model(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filte
 
 print(net, flush=True)
 
+l2_weights=0.00110794568
+
+from torch import autograd
+
+class IRM_Calculation():
+  def __init__(self, l2_weight,loss_fun,penalty_weight) -> None:
+       super(IRM_Calculation, self).__init__()
+       self.l2_weights=l2_weights
+       self.mean_all=loss_fun #nn.functional.binary_cross_entropy_with_logits
+       self.penalty_weight=penalty_weight
+
+  def penalty(self,logits, y):
+
+    scale = torch.tensor(1.).to(device).requires_grad_()
+    loss = self.mean_all(logits*scale, y)
+    grad = autograd.grad(loss, [scale], create_graph=True)[0]
+
+    return torch.sum(grad**2)
+
+  def IRM(self,logits, y,model):
+
+    weight_norm = torch.tensor(0.).to(device)
+    for w in model.parameters():
+      weight_norm += w.norm().pow(2)
+    loss=self.mean_all(logits, y).clone()
+    loss += self.l2_weights * weight_norm
+    loss += self.penalty_weight * self.penalty(logits, y)
+
+    return loss
+
 def train_main():
     if (start_epoch == 0) and (not os.path.exists(params_path)):
         os.makedirs(params_path)
