@@ -387,7 +387,7 @@ def train_main():
             else :
                 loss = criterion(outputs, labels)
 
-            aug = False
+            aug = True
             irm_calculation = IRM_Calculation(l2_weights, criterion, 1)
             # loss=irm_calculation.IRM(outputs,labels,net)
 
