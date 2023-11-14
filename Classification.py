@@ -221,7 +221,7 @@ for s in range(number_envs):
                                   save=True, env_number=s)
     train_loader_aug, _, _, _, _, _, _, _ = load_graphdata_channel_aug(
         aug_path, num_of_hours,
-        num_of_days, num_of_weeks, DEVICE, batch_size)
+        num_of_days, num_of_weeks, DEVICE, batch_size, number_envs)
 
     dataset_name = f'dataset_{s + 1}'
 

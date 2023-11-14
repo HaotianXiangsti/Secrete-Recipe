@@ -610,7 +610,7 @@ def load_graphdata_channel1(graph_signal_matrix_filename, num_of_hours, num_of_d
 
     return train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, mean, std
 
-def load_graphdata_channel_aug(graph_signal_matrix_filename, num_of_hours, num_of_days, num_of_weeks, DEVICE, batch_size, shuffle=True):
+def load_graphdata_channel_aug(graph_signal_matrix_filename, num_of_hours, num_of_days, num_of_weeks, DEVICE, batch_size, env_number, shuffle=True):
     '''
     这个是为PEMS的数据准备的函数
     将x,y都处理成归一化到[-1,1]之前的数据;
@@ -637,9 +637,9 @@ def load_graphdata_channel_aug(graph_signal_matrix_filename, num_of_hours, num_o
     dirpath = os.path.dirname(graph_signal_matrix_filename)
 
     filename = os.path.join(dirpath,
-                            file + '_r' + str(num_of_hours) + '_d' + str(num_of_days) + '_w' + str(num_of_weeks)) +'_astcgn'
+                            file + '_r' + str(num_of_hours) + '_d' + str(num_of_days) + '_w' + str(num_of_weeks)) +'_astcgn'+"_envirment"+str(env_number)
 
-    filename = filename.replace('/', '\\')
+    filename = filename.replace('\\', '/') #r
 
     print('load file:', filename)
 
