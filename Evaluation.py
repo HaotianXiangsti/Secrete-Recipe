@@ -362,7 +362,7 @@ with torch.no_grad():
 
     val_loss = 0
     generated_flag = True
-    number_envs = 6
+    number_envs = int(training_config['number_envs'])
     condtion_list = [0.25, 0.5, 1, 1.25, 1.5, 2]
     for s in range(number_envs):
         for i, x in enumerate(train_loader):

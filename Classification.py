@@ -208,7 +208,19 @@ net = make_model(DEVICE, nb_block, in_channels, K, nb_chev_filter, nb_time_filte
 
 print(net, flush=True)
 
-l2_weights=0.00110794568
+run_name = str(training_config['run_name']) #"try_condition"
+
+train_aug_loader_dict = {}
+
+number_envs = int(training_config['number_envs'])
+
+for s in range(number_envs):
+
+    aug_path = "aug/" + run_name + "/environment" + str(s) + ".npz"
+
+
+
+l2_weights = 0.00110794568
 
 from torch import autograd
 
@@ -237,6 +249,17 @@ class IRM_Calculation():
     loss += self.penalty_weight * self.penalty(logits, y)
 
     return loss
+
+def aug_train(encoder_inputs,labels_aug,missing_value,masked_flag,criterion):
+
+    criterion_masked = masked_mae
+    outputs_aug = net(encoder_inputs)
+    if masked_flag:
+        loss_aug = criterion_masked(outputs_aug, labels_aug, missing_value)
+    else:
+        loss_aug = criterion(outputs_aug, labels_aug)
+
+    return outputs_aug, loss_aug
 
 def train_main():
     if (start_epoch == 0) and (not os.path.exists(params_path)):
