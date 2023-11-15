@@ -365,7 +365,11 @@ with torch.no_grad():
     number_envs = int(training_config['number_envs'])
     condtion_list = [0.25, 0.5, 1, 1.25, 1.5, 2]
     for s in range(number_envs):
+
+        sample_list = list()
+
         for i, x in enumerate(train_loader):
+
             encoder_inputs, labels = x
             c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
             x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
@@ -376,6 +380,10 @@ with torch.no_grad():
             path = "evaluation/"+run_name+"/results"+str(i)+".jpg"
             sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
                                                                   ground_truth = x, path = path, c = c, fid_flag = fid_flag)
+            sampled_data = sampled_data.unsqueeze(-2)
+            c = c.reshape(c.shape[0], c.shape[1], 2, -1)
+            sampled_data = torch.cat((c, sampled_data), dim = -2)
+            sample_list.append(sampled_data)
 
 
         if generated_flag == True:
@@ -385,5 +393,6 @@ with torch.no_grad():
 
 
             aug_path = "aug/"+run_name+"/environment"+str(s)+".npz"
+            sampled_data = torch.cat(sample_list, dim = 0)[:,:,:,-1]
             np.savez(aug_path, data = sampled_data.detach().cpu().numpy())
             read_and_generate_dataset_aug(aug_path, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True, env_number = s)
