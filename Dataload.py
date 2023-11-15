@@ -343,7 +343,9 @@ def read_and_generate_dataset_aug(graph_signal_matrix_filename,
     val_timestamp = validation_set[-1]
     test_timestamp = testing_set[-1]
 
-    (stats, train_x_norm, val_x_norm, test_x_norm) = normalization(train_x, val_x, test_x)
+    (stats, _, _, _) = normalization(train_x, val_x, test_x)
+
+    (train_x_norm, val_x_norm, test_x_norm) = (train_x, val_x, test_x)
 
     all_data = {
         'train': {
