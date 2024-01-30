@@ -160,7 +160,7 @@ params_path = os.path.join('experiments', dataset_name, folder_dir)
 print('params_path:', params_path)
 
 
-train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, _mean, _std = load_graphdata_channel1(
+train_x_tensor, val_x_tensor, test_x_tensor, train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, _mean, _std = load_graphdata_channel1(
     graph_signal_matrix_filename, num_of_hours,
     num_of_days, num_of_weeks, DEVICE, batch_size)
 

@@ -245,7 +245,7 @@ def compute_val_loss_mstgcn(net, val_loader, criterion,  masked_flag,missing_val
 
             tmp.append(loss.item())
             if batch_index % 100 == 0:
-                print('validation batch %s / %s, loss: %.2f' % (batch_index + 1, val_loader_length, loss.item()))
+                print('validation batch %s / %s, loss: %.5f' % (batch_index + 1, val_loader_length, loss.item()))
             if (limit is not None) and batch_index >= limit:
                 break
 
@@ -371,9 +371,9 @@ def predict_and_save_results_mstgcn(net, data_loader, data_target_tensor, global
                 mae = mean_absolute_error(data_target_tensor[:, :, i], prediction[:, :, i])
                 rmse = mean_squared_error(data_target_tensor[:, :, i], prediction[:, :, i]) ** 0.5
                 mape = masked_mape_np(data_target_tensor[:, :, i], prediction[:, :, i], 0)
-            print('MAE: %.2f' % (mae))
-            print('RMSE: %.2f' % (rmse))
-            print('MAPE: %.2f' % (mape))
+            print('MAE: %.5f' % (mae ))
+            print('RMSE: %.5f' % (rmse ))
+            print('MAPE: %.5f' % (mape))
             excel_list.extend([mae, rmse, mape])
 
         # print overall results
@@ -385,10 +385,12 @@ def predict_and_save_results_mstgcn(net, data_loader, data_target_tensor, global
             mae = mean_absolute_error(data_target_tensor.reshape(-1, 1), prediction.reshape(-1, 1))
             rmse = mean_squared_error(data_target_tensor.reshape(-1, 1), prediction.reshape(-1, 1)) ** 0.5
             mape = masked_mape_np(data_target_tensor.reshape(-1, 1), prediction.reshape(-1, 1), 0)
-        print('all MAE: %.2f' % (mae))
-        print('all RMSE: %.2f' % (rmse))
-        print('all MAPE: %.2f' % (mape))
+        print('all MAE: %.5f' % (mae))
+        print('all RMSE: %.5f' % (rmse ))
+        print('all MAPE: %.5f' % (mape))
         excel_list.extend([mae, rmse, mape])
         print(excel_list)
+
+        return prediction
 
 

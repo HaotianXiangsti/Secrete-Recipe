@@ -69,7 +69,7 @@ import numpy as np
 import argparse
 import configparser
 
-from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation, read_and_generate_dataset_aug, load_graphdata_channel_aug
+from Dataload import search_data, get_sample_indices, normalization, read_and_generate_dataset, load_graphdata_channel1, get_adjacency_matrix, process_safegraph_adjmatrix, load_graphdata_channel_evaluation, read_and_generate_dataset_aug, load_graphdata_channel_aug, read_and_generate_dataset_SafeGraph, read_and_generate_dataset_SafeGraph_test
 from Module import GCNModel
 from model.ASTGCN_r import make_model
 
@@ -122,6 +122,12 @@ data['data'].shape
 
 if dataset_name == "NYC":
     perciption_file_path = data_config["perciption_csv"]
+    data_seq, all_data, _ =read_and_generate_dataset_SafeGraph_test(graph_signal_matrix_filename, perciption_file_path,
+                                       0,0,
+                                       num_of_hours, num_for_predict,
+                                       points_per_hour=points_per_hour, save=True)
+    print("After it", len(all_data))
+    print(data_seq.shape)
 
 else:
     all_data = read_and_generate_dataset(graph_signal_matrix_filename, 0, 0, num_of_hours, num_for_predict, points_per_hour=points_per_hour, save=True)
@@ -197,9 +203,10 @@ print('folder_dir:', folder_dir)
 params_path = os.path.join('experiments', dataset_name, folder_dir)
 print('params_path:', params_path)
 
-train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, _mean, _std = load_graphdata_channel1(
+train_x_tensor, val_x_tensor, test_x_tensor, train_loader, train_target_tensor, val_loader, val_target_tensor, test_loader, test_target_tensor, _mean, _std = load_graphdata_channel1(
     graph_signal_matrix_filename, num_of_hours,
     num_of_days, num_of_weeks, DEVICE, batch_size)
+
 
 adj_mx, distance_mx = get_adjacency_matrix(adj_filename, num_of_vertices, id_filename)
 
@@ -212,7 +219,13 @@ run_name = str(training_config['run_name']) #"try_condition"
 
 train_aug_loader_dict = {}
 
+train_aug_loader_list = list()
+
+train_aug_loader_list.append(train_loader)
+
 number_envs = int(training_config['number_envs'])
+
+'''
 
 for s in range(number_envs):
 
@@ -226,6 +239,9 @@ for s in range(number_envs):
     dataset_name = f'dataset_{s + 1}'
 
     train_aug_loader_dict[dataset_name] = train_loader_aug
+    train_aug_loader_list.append(train_loader_aug)
+
+'''
 
 
 
@@ -374,8 +390,9 @@ def train_main():
 
         net.train()  # ensure dropout layers are in train mode
 
-        for batch_index, batch_data in enumerate(train_loader):
+        #for batch_index, batch_data in enumerate(train_loader):
 
+        for batch_index, batch_data in enumerate(train_loader):
             encoder_inputs, labels = batch_data
 
             optimizer.zero_grad()
@@ -387,13 +404,24 @@ def train_main():
             else :
                 loss = criterion(outputs, labels)
 
-            aug = True
+            aug = False
             irm_calculation = IRM_Calculation(l2_weights, criterion, 1)
             # loss=irm_calculation.IRM(outputs,labels,net)
 
             if aug:
 
                 loss_aug_list =list()
+                data_batch_aug_list = [batch_data_1, batch_data_2, batch_data_3, batch_data_4, batch_data_5, batch_data_6]
+
+                for batch_data_aug in data_batch_aug_list:
+                    encoder_inputs_aug, labels_aug = batch_data_aug
+                    outputs_aug, loss_aug = aug_train(encoder_inputs_aug, labels_aug, missing_value, masked_flag,
+                                                      criterion)
+                    loss_aug = irm_calculation.IRM(outputs_aug, labels_aug, net)
+
+                    loss_aug_list.append(loss_aug)
+
+                '''
                 for s in range(len(train_aug_loader_dict)):
 
                     dataset_name = f'dataset_{s + 1}'
@@ -406,6 +434,7 @@ def train_main():
                         outputs_aug, loss_aug = aug_train(encoder_inputs_aug, labels_aug, missing_value,masked_flag, criterion)
                         loss_aug = irm_calculation.IRM(outputs_aug, labels_aug, net)
                         loss_aug_list.append(loss_aug)
+                '''
 
                 loss = loss + sum(loss_aug_list)
 
@@ -428,8 +457,88 @@ def train_main():
 
     print('best epoch:', best_epoch)
 
+    prediction = predict_main(best_epoch, test_loader, test_target_tensor, metric_method, _mean, _std, 'test')
+
     # apply the best model on the test set
-    predict_main(best_epoch, test_loader, test_target_tensor,metric_method ,_mean, _std, 'test')
+    '''
+    prediction = predict_main(best_epoch, test_loader, test_target_tensor,metric_method ,_mean, _std, 'test')
+
+    #total_data = torch.concat((train_target_tensor, val_target_tensor, test_target_tensor), dim = 0)
+
+    #total_data = torch.concat((train_target_tensor, val_target_tensor, test_target_tensor), dim=0)
+
+
+
+
+    total_data = torch.concat((train_target_tensor, val_target_tensor, test_target_tensor), dim=0).detach().cpu().numpy() * 9432.49867276 + 5981.70799134
+    total_data = np.concatenate((data_seq[:9,:, :], total_data), axis = 0)
+    prediction = np.concatenate((data_seq[:9,:, ], train_target_tensor[:,:,:].detach().cpu().numpy(), val_target_tensor[:,:,:].detach().cpu().numpy(), prediction), axis = 0)*9432.49867276+5981.70799134
+    np.save("prediction.npy", prediction)
+    #total_data = total_data.detach().cpu().numpy() * 9432.49867276 + 5981.70799134
+    np.save("total_data.npy", total_data)
+
+    x = np.arange(total_data.shape[0])
+    plt.plot(x[-18:], prediction[:,1,-1][-18:], linestyle='--', linewidth=3, label = "37527 Prediction" )
+    plt.plot(x[-18:], prediction[:, 8, -1][-18:], linestyle='--', linewidth=3, label = "14307 Predition")
+
+
+    plt.plot(x, total_data[:,1,-1], label = "37527 Observation")
+    plt.plot(x, total_data[:, 8, -1], label = "14307 Observation")
+
+    plt.xlim(1,90)
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    plt.plot(data_seq[:,:,-1])
+    plt.show()
+    '''
+
+
+
+    ''''
+    plt.figure(figsize=(8, 7))
+    prediction = np.concatenate(
+        (train_target_tensor.detach().cpu().numpy(), val_target_tensor.detach().cpu().numpy(), prediction), axis=0)
+    total_data = torch.concat((train_target_tensor, val_target_tensor, test_target_tensor), dim=0)
+    
+    # 创建 x 轴的刻度
+    x_ticks = np.arange(0, 1440, 180)  # 每隔 60 个点（每隔 5 小时）设置一个刻度
+
+    # 创建 x 轴的标签
+    x_labels = [f"{hour:02d}:00" for hour in range(0, 24, 3)]  # 设置每隔 5 小时显示一个小时标签
+
+    # 绘制数据
+    plt.plot(prediction[:, 35, -1][-1440:], linestyle='--', linewidth=3, label="Sensor NO.35 Prediction")
+    #plt.plot(prediction[:, 57, -1][-1440:], linestyle='--', linewidth=3, label="Sensor NO.57 Prediction")
+
+    print(prediction[1, 35, -1])
+
+
+    total_data = total_data.detach().cpu().numpy()
+
+    np.save("total_data.npy",total_data)
+
+    plt.plot(total_data[:, 35, -1][-1440:], label="Sensor NO.35 Observation")
+    #plt.plot(total_data[:, 57, -1][-1440:], label="Sensor NO.57 Observation")
+
+    # 设置 x 轴的刻度和标签
+    plt.xticks(x_ticks, x_labels, rotation=45)  # 旋转标签以便显示
+
+    # 添加标签和标题
+    plt.xlabel('Time')
+    plt.ylabel('Flow')
+    plt.legend()
+
+    # 显示图形
+
+
+    plt.savefig('my_plot.png')
+    plt.show()
+    '''
+
+
+
 
 
 def predict_main(global_step, data_loader, data_target_tensor,metric_method, _mean, _std, type):
@@ -447,9 +556,12 @@ def predict_main(global_step, data_loader, data_target_tensor,metric_method, _me
     params_filename = os.path.join(params_path, 'epoch_%s.params' % global_step)
     print('load weight from:', params_filename)
 
+
     net.load_state_dict(torch.load(params_filename))
 
-    predict_and_save_results_mstgcn(net, data_loader, data_target_tensor, global_step, metric_method,_mean, _std, params_path, type)
+    prediction = predict_and_save_results_mstgcn(net, data_loader, data_target_tensor, global_step, metric_method,_mean, _std, params_path, type)
+
+    return prediction
 
 
 if __name__ == "__main__":
