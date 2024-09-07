@@ -225,7 +225,7 @@ train_aug_loader_list.append(train_loader)
 
 number_envs = int(training_config['number_envs'])
 
-'''
+
 
 for s in range(number_envs):
 
@@ -240,8 +240,6 @@ for s in range(number_envs):
 
     train_aug_loader_dict[dataset_name] = train_loader_aug
     train_aug_loader_list.append(train_loader_aug)
-
-'''
 
 
 
@@ -411,6 +409,8 @@ def train_main():
             if aug:
 
                 loss_aug_list =list()
+
+                """
                 data_batch_aug_list = [batch_data_1, batch_data_2, batch_data_3, batch_data_4, batch_data_5, batch_data_6]
 
                 for batch_data_aug in data_batch_aug_list:
@@ -421,7 +421,9 @@ def train_main():
 
                     loss_aug_list.append(loss_aug)
 
-                '''
+                """
+
+                
                 for s in range(len(train_aug_loader_dict)):
 
                     dataset_name = f'dataset_{s + 1}'
@@ -434,7 +436,7 @@ def train_main():
                         outputs_aug, loss_aug = aug_train(encoder_inputs_aug, labels_aug, missing_value,masked_flag, criterion)
                         loss_aug = irm_calculation.IRM(outputs_aug, labels_aug, net)
                         loss_aug_list.append(loss_aug)
-                '''
+                
 
                 loss = loss + sum(loss_aug_list)
 
