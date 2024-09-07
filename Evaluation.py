@@ -381,7 +381,7 @@ with torch.no_grad():
             sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
                                                                   ground_truth = x, path = path, c = c, fid_flag = fid_flag)
             sampled_data = sampled_data.unsqueeze(-2)
-            c = c.reshape(c.shape[0], c.shape[1], 2, -1)
+            c = c.reshape(c.shape[0], c.shape[1], 3, -1)
             sampled_data = torch.cat((c, sampled_data), dim = -2)
             sample_list.append(sampled_data)
 
