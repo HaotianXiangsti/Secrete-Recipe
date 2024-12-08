@@ -386,109 +386,66 @@ def train_main():
 
         print('load weight from: ', params_filename)
 
-    # train model
+    merged_train_loader = merge_train_datasets(train_loader, train_aug_loader_list)
+    
+    # Modified training loop using merged dataset
     for epoch in range(start_epoch, epochs):
-
         params_filename = os.path.join(params_path, 'epoch_%s.params' % epoch)
-
+        
         if masked_flag:
-            val_loss = compute_val_loss_mstgcn(net, val_loader, criterion_masked, masked_flag,missing_value,sw, epoch)
+            val_loss = compute_val_loss_mstgcn(net, val_loader, criterion_masked, masked_flag, missing_value, sw, epoch)
         else:
             val_loss = compute_val_loss_mstgcn(net, val_loader, criterion, masked_flag, missing_value, sw, epoch)
-
-
+        
         if val_loss < best_val_loss:
-
             files = os.listdir(params_path)
-
-            # 遍历文件夹中的文件
             for filename in files:
                 if filename.endswith('.params'):
-                    # 构建文件的完整路径
                     file_path = os.path.join(params_path, filename)
-
-                    # 删除文件
                     os.remove(file_path)
-
+            
             best_val_loss = val_loss
             best_epoch = epoch
             torch.save(net.state_dict(), params_filename)
             print('save parameters to file: %s' % params_filename)
-
-        net.train()  # ensure dropout layers are in train mode
-
-        #for batch_index, batch_data in enumerate(train_loader):
-
-        for batch_index, batch_data in enumerate(train_loader):
+        
+        net.train()
+        
+        # Use merged dataset for training
+        for batch_index, batch_data in enumerate(merged_train_loader):
             encoder_inputs, labels = batch_data
-
             optimizer.zero_grad()
-
+            
             outputs = net(encoder_inputs)
-
+            
             if masked_flag:
-                loss = criterion_masked(outputs, labels,missing_value)
-            else :
+                loss = criterion_masked(outputs, labels, missing_value)
+            else:
                 loss = criterion(outputs, labels)
-
-            aug = False
-            irm_calculation = IRM_Calculation(l2_weights, criterion, 1)
-            # loss=irm_calculation.IRM(outputs,labels,net)
-
-            if aug:
-
-                loss_aug_list =list()
-
-                """
-                data_batch_aug_list = [batch_data_1, batch_data_2, batch_data_3, batch_data_4, batch_data_5, batch_data_6]
-
-                for batch_data_aug in data_batch_aug_list:
-                    encoder_inputs_aug, labels_aug = batch_data_aug
-                    outputs_aug, loss_aug = aug_train(encoder_inputs_aug, labels_aug, missing_value, masked_flag,
-                                                      criterion)
-                    loss_aug = irm_calculation.IRM(outputs_aug, labels_aug, net)
-
-                    loss_aug_list.append(loss_aug)
-
-                """
-
-                
-                for s in range(len(train_aug_loader_dict)):
-
-                    dataset_name = f'dataset_{s + 1}'
-
-                    train_loader_aug = train_aug_loader_dict[dataset_name]
-
-                    for batch_index_aug, batch_data_aug in enumerate(train_loader_aug):
-
-                        encoder_inputs_aug, labels_aug = batch_data_aug
-                        outputs_aug, loss_aug = aug_train(encoder_inputs_aug, labels_aug, missing_value,masked_flag, criterion)
-                        loss_aug = irm_calculation.IRM(outputs_aug, labels_aug, net)
-                        loss_aug_list.append(loss_aug)
-                
-
-                loss = loss + sum(loss_aug_list)
-
-
-
-
+            
+            # IRM calculation if needed
+            if use_irm:
+                irm_calculation = IRM_Calculation(l2_weights, criterion, 1)
+                loss = irm_calculation.IRM(outputs, labels, net)
+            
             loss.backward()
-
             optimizer.step()
-
+            
             training_loss = loss.item()
-
             global_step += 1
-
             sw.add_scalar('training_loss', training_loss, global_step)
-
+            
             if global_step % 1000 == 0:
-
-                print('global step: %s, training loss: %.2f, time: %.2fs' % (global_step, training_loss, time() - start_time))
-
+                print('global step: %s, training loss: %.2f, time: %.2fs' % 
+                      (global_step, training_loss, time() - start_time))
+    
     print('best epoch:', best_epoch)
-
     prediction = predict_main(best_epoch, test_loader, test_target_tensor, metric_method, _mean, _std, 'test')
+    return prediction
+        
+
+       
+  
 
     # apply the best model on the test set
     '''
