@@ -287,6 +287,35 @@ def aug_train(encoder_inputs,labels_aug,missing_value,masked_flag,criterion):
 
     return outputs_aug, loss_aug
 
+def merge_train_datasets(original_loader, aug_loader_list):
+    """
+    Merge multiple data loaders into a single dataset
+    
+    Args:
+        original_loader: Original training data loader
+        aug_loader_list: List of augmented data loaders
+    
+    Returns:
+        DataLoader: Combined data loader with all datasets
+    """
+    # Get all datasets from the loaders
+    all_datasets = [original_loader.dataset]
+    for aug_loader in aug_loader_list:
+        all_datasets.append(aug_loader.dataset)
+    
+    # Combine all datasets using ConcatDataset
+    combined_dataset = ConcatDataset(all_datasets)
+    
+    # Create new loader with combined dataset using same batch size as original
+    combined_loader = DataLoader(
+        combined_dataset,
+        batch_size=original_loader.batch_size,
+        shuffle=True,
+        num_workers=original_loader.num_workers if hasattr(original_loader, 'num_workers') else 0
+    )
+    
+    return combined_loader
+
 def train_main():
     if (start_epoch == 0) and (not os.path.exists(params_path)):
         os.makedirs(params_path)
