@@ -181,6 +181,8 @@ print('params_path:', params_path)
 
 # Check Repeated Parameters
 
+use_irm = True
+
 learning_rate = float(training_config['learning_rate'])
 epochs = int(training_config['epochs'])
 start_epoch = int(training_config['start_epoch'])
@@ -426,7 +428,7 @@ def train_main():
             # IRM calculation if needed
             if use_irm:
                 irm_calculation = IRM_Calculation(l2_weights, criterion, 1)
-                loss = irm_calculation.IRM(outputs, labels, net)
+                loss += irm_calculation.IRM(outputs, labels, net)
             
             loss.backward()
             optimizer.step()
