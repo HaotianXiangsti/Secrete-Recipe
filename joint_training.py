@@ -8,6 +8,37 @@ import os
 import numpy as np
 from time import time
 
+l2_weights = 0.00110794568
+
+from torch import autograd
+
+class IRM_Calculation():
+  def __init__(self, device, l2_weight,loss_fun,penalty_weight) -> None:
+       super(IRM_Calculation, self).__init__()
+       self.device = device
+       self.l2_weights=l2_weights
+       self.mean_all=loss_fun #nn.functional.binary_cross_entropy_with_logits
+       self.penalty_weight=penalty_weight
+
+  def penalty(self,logits, y):
+
+    scale = torch.tensor(1.).to(self.device).requires_grad_()
+    loss = self.mean_all(logits*scale, y)
+    grad = autograd.grad(loss, [scale], create_graph=True)[0]
+
+    return torch.sum(grad**2)
+
+  def IRM(self,logits, y,model):
+
+    weight_norm = torch.tensor(0.).to(self.device)
+    for w in model.parameters():
+      weight_norm += w.norm().pow(2)
+    loss=self.mean_all(logits, y).clone()
+    loss += self.l2_weights * weight_norm
+    loss += self.penalty_weight * self.penalty(logits, y)
+
+    return loss
+
 class JointTrainer:
     def __init__(self, 
                  diffusion_model,
@@ -48,10 +79,21 @@ class JointTrainer:
             self.classification_model.parameters(), 
             lr=self.learning_rate
         )
+
         
         # Loss functions
         self.mse_loss = nn.MSELoss()
         self.criterion_masked = self.masked_mae
+
+        # IRM setup
+        self.l2_weights = 0.00110794568
+        self.penalty_weight = 1.0  # Adjust as needed
+        self.irm_calc = IRM_Calculation(
+            device = self.device,
+            l2_weight=self.l2_weights,
+            loss_fun=self.criterion_masked,
+            penalty_weight=self.penalty_weight
+        )
         
         # Logging
         self.run_name = str(config['Training']['run_name'])
@@ -95,19 +137,42 @@ class JointTrainer:
         loss = self.mse_loss(noise, predicted_noise)
         return loss
 
-    def train_classification_step(self, encoder_inputs, labels):
-        """Single training step for classification model"""
+    def train_classification_step(self, encoder_inputs, labels, irm_use = True):
+        """Single training step for classification model with IRM"""
         self.classification_optimizer.zero_grad()
         outputs = self.classification_model(encoder_inputs)
-        loss = self.criterion_masked(outputs, labels, 0.0)
+        if irm_use:
+            # Use IRM loss instead of standard loss
+            loss = self.irm_calc.IRM(outputs, labels, self.classification_model)
+
+        else:
+            loss = self.criterion_masked(outputs, labels, 0.0)
+
         return loss, outputs
 
     def generate_augmented_data(self, encoder_inputs):
-        """Generate augmented data using diffusion model"""
+        """
+        Generate augmented data and corresponding targets from diffusion model
+        
+        Parameters:
+        -----------
+        encoder_inputs: tensor of shape (batch_size, num_vertices, num_features, time_steps)
+        
+        Returns:
+        --------
+        augmented_data: tensor of shape (batch_size, num_vertices, num_features, time_steps)
+        augmented_targets: tensor of shape (batch_size, num_vertices, prediction_horizon)
+        """
         with torch.no_grad():
             c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
             x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
-
+            
+            # Generate random scaling factors between 0.5 and 2.0
+            random_scales = torch.rand_like(c[:,:,-1:]) * 1.5 + 0.5
+            
+            # Apply random scaling to conditions
+            c[:,:,-1:] = c[:,:,-1:] * random_scales
+            
             sampled_data, _, _ = self.diffusion.sample(
                 self.diffusion_model,
                 n=x.shape[0],
@@ -116,13 +181,17 @@ class JointTrainer:
                 path=os.path.join("results", self.run_name, "aug.jpg"),
                 c=c
             )
-
+            
             # Reshape sampled data to match original format
-            sampled_data = sampled_data.unsqueeze(-2)
-            c = c.reshape(c.shape[0], c.shape[1], -1, 4)  # Adjust the last dimension based on your data
-            augmented_data = torch.cat((c, sampled_data), dim=-2)
-
-            return augmented_data
+            sampled_data = sampled_data.unsqueeze(-2)  # Shape: (b, v, 1, T)
+            c = c.reshape(c.shape[0], c.shape[1], -1, 4)  # Shape: (b, v, num_features-1, T)
+            augmented_data = torch.cat((c, sampled_data), dim=-2)  # Shape: (b, v, num_features, T)
+            
+            # Extract target from augmented data following the original code's approach
+            # Target is taken from the last feature channel (traffic flow)
+            augmented_targets = augmented_data[:, :, -1, :]  # Shape: (b, v, T)
+            
+            return augmented_data, augmented_targets
 
     def train(self):
         """Main training loop"""
@@ -159,7 +228,7 @@ class JointTrainer:
             for batch_idx, (encoder_inputs, labels) in enumerate(pbar):
                 # Generate augmented data
 
-                augmented_data = self.generate_augmented_data(encoder_inputs)
+                augmented_data, augmented_targets = self.generate_augmented_data(encoder_inputs)
 
                 
                 # Train classification model
@@ -171,7 +240,7 @@ class JointTrainer:
                 
                 # Train diffusion model with both losses
                 diff_loss = self.train_diffusion_step(encoder_inputs, labels)
-                aug_class_loss, _ = self.train_classification_step(augmented_data, labels)
+                aug_class_loss, _ = self.train_classification_step(augmented_data, augmented_targets)
 
                 
                 
