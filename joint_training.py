@@ -35,6 +35,7 @@ class JointTrainer:
         # Training parameters
         self.epochs = int(config['Training']['epochs'])
         self.diffusion_pretraining_epochs = int(config['Training']['diff_epochs'])
+        self.epochs = int(config['Training']['epochs'])+int(config['Training']['diff_epochs'])
         self.batch_size = int(config['Training']['batch_size'])
         self.learning_rate = float(config['Training']['learning_rate'])
         
