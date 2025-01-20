@@ -18,6 +18,8 @@ from Dataload import (
 from Module import GCNModel
 from model.ASTGCN_r import make_model
 
+from lib.utils import predict_and_save_results_mstgcn
+
 # Import the JointTrainer class
 from joint_training import JointTrainer
 
@@ -105,10 +107,10 @@ def main():
     
     # Initialize Diffusion model
     time_dim = int(model_para["time_dim"])
-    input_shape = int(model_para["input_shape"])
+    input_shape = int(model_para["input_shape"])*int(len_input/4)
     input_dim = int(model_para["input_dim"])
     hidden_dim = int(model_para["hidden_dim"])
-    output_dim = int(model_para["output_dim"])
+    output_dim = int(model_para["output_dim"])*int(len_input/4)
     
     diffusion_model = GCNModel(
         time_dim=time_dim,
@@ -145,7 +147,7 @@ def main():
     noise_steps = int(diffusion_para["noise_steps"])
     beta_start = float(diffusion_para["beta_start"])
     beta_end = float(diffusion_para["beta_end"])
-    var_dim = int(diffusion_para["var_dim"])
+    var_dim = len_input#int(diffusion_para["var_dim"])
     number_of_nodes = int(diffusion_para["number_of_nodes"])
     
     from main import Diffusion  # Import your Diffusion class
@@ -171,8 +173,29 @@ def main():
         edge_index_info=edge_index_info
     )
     
-    # Start joint training
-    joint_trainer.train()
+    best_model_path = joint_trainer.train()  # Now returns path to best model
+    
+    # Load the best model checkpoint
+    print("Loading best model checkpoint for final evaluation...")
+    joint_trainer.classification_model.load_state_dict(
+        torch.load(best_model_path)
+    )
+
+    # Evaluate using the predict_and_save_results_mstgcn function
+    prediction = predict_and_save_results_mstgcn(
+        net=joint_trainer.classification_model,
+        data_loader=joint_trainer.val_loader,
+        data_target_tensor=val_target_tensor,  # This comes from your data loading
+        global_step=joint_trainer.best_epoch,  # We'll need to track this
+        metric_method='mask',
+        _mean=_mean,
+        _std=_std,
+        params_path=os.path.join("results", joint_trainer.run_name),
+        type='val'
+    )
+    
+    print("Final evaluation completed!")
+
 
 if __name__ == "__main__":
     main()
