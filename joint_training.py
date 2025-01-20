@@ -69,6 +69,8 @@ class JointTrainer:
         self.epochs = int(config['Training']['epochs'])+int(config['Training']['diff_epochs'])
         self.batch_size = int(config['Training']['batch_size'])
         self.learning_rate = float(config['Training']['learning_rate'])
+
+        self.input_len = int(config['Data']['len_input'])
         
         # Setup optimizers
         self.diffusion_optimizer = optim.AdamW(
