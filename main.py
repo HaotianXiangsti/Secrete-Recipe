@@ -175,7 +175,7 @@ diffusion_para = config["Diffusion Parameter"]
 noise_steps = int(diffusion_para["noise_steps"])
 beta_start = float(diffusion_para["beta_start"])
 beta_end = float(diffusion_para["beta_end"])
-var_dim = int(diffusion_para["var_dim"])
+var_dim = len_input #int(diffusion_para["var_dim"])
 number_of_nodes = int(diffusion_para["number_of_nodes"])
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -323,10 +323,10 @@ model_para = config["Model Parameter"]
 
 time_dim = int(model_para["time_dim"])
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-input_shape = int(model_para["input_shape"])
+input_shape = int(model_para["input_shape"])*int(len_input/4)
 input_dim = int(model_para["input_dim"]) #input_dim should equal to time_dime
 hidden_dim = int(model_para["hidden_dim"])
-output_dim = int(model_para["output_dim"])
+output_dim = int(model_para["output_dim"])*int(len_input/4)
 
 # create model
 mean_train, std_train = _mean, _std
@@ -359,7 +359,6 @@ for epoch in range(number_of_epochs):
         x = encoder_inputs[ :, :, -1:, : ].reshape(encoder_inputs.shape[0],encoder_inputs.shape[1],-1) # Batch_size, 172, 1, 4 -> Batch_size, 172, 42
         t = diffusion.sample_timesteps(x.shape[0]).to(device)
         x_t, noise = diffusion.noise_images(x, t)
-
         predicted_noise = model(torch.concat((c, x_t),-1), edge_index_info, t)
         pred_std = torch.std(predicted_noise, dim=0)
         loss_std = mse(pred_std, torch.ones_like(pred_std, device=device))
@@ -402,6 +401,8 @@ for epoch in range(number_of_epochs):
                 best_val_loss = val_loss
 
                 path = os.path.join("results", run_name, "best_ckpt_results.jpg")
+                c = encoder_inputs[:, :, :-1, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
+                x = encoder_inputs[:, :, -1:, :].reshape(encoder_inputs.shape[0], encoder_inputs.shape[1], -1)
                 sampled_data, ground_truth, loss_recon = diffusion.sample(model, n = x.shape[0], edge_index_info = edge_index_info,
                                                               ground_truth = x, path = path, c = c, fid_flag = fid_flag)
                 '''
