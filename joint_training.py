@@ -101,6 +101,9 @@ class JointTrainer:
         self.run_name = str(config['Training']['run_name'])
         self.setup_logging()
         self.logger = SummaryWriter(os.path.join("runs", self.run_name))
+
+        self.best_epoch = 0  # Track epoch with best validation loss
+        self.best_model_path = None  # Track path of best model checkpoint
         
     def setup_logging(self):
         """Set up logging directories"""
@@ -129,7 +132,7 @@ class JointTrainer:
         
         t = self.diffusion.sample_timesteps(x.shape[0]).to(self.device)
         x_t, noise = self.diffusion.noise_images(x, t)
-        
+
         predicted_noise = self.diffusion_model(
             torch.concat((c, x_t), -1), 
             self.edge_index_info, 
@@ -139,7 +142,7 @@ class JointTrainer:
         loss = self.mse_loss(noise, predicted_noise)
         return loss
 
-    def train_classification_step(self, encoder_inputs, labels, irm_use = True):
+    def train_classification_step(self, encoder_inputs, labels, irm_use = False):
         """Single training step for classification model with IRM"""
         self.classification_optimizer.zero_grad()
         outputs = self.classification_model(encoder_inputs)
@@ -186,7 +189,7 @@ class JointTrainer:
             
             # Reshape sampled data to match original format
             sampled_data = sampled_data.unsqueeze(-2)  # Shape: (b, v, 1, T)
-            c = c.reshape(c.shape[0], c.shape[1], -1, 4)  # Shape: (b, v, num_features-1, T)
+            c = c.reshape(c.shape[0], c.shape[1], -1, self.input_len)  # Shape: (b, v, num_features-1, T)
             augmented_data = torch.cat((c, sampled_data), dim=-2)  # Shape: (b, v, num_features, T)
             
             # Extract target from augmented data following the original code's approach
@@ -201,75 +204,108 @@ class JointTrainer:
         start_time = time()
         global_step = 0
         
-        # Phase 1: Diffusion pre-training
+        # Phase 1: Diffusion pre-training 
         print("Starting diffusion pre-training phase...")
         for epoch in range(self.diffusion_pretraining_epochs):
             self.diffusion_model.train()
             pbar = tqdm(self.train_loader)
+            epoch_diff_loss = 0
             
             for batch_idx, (encoder_inputs, labels) in enumerate(pbar):
                 loss = self.train_diffusion_step(encoder_inputs, labels)
                 loss.backward()
                 self.diffusion_optimizer.step()
                 
+                epoch_diff_loss += loss.item()
                 pbar.set_description(f"Diffusion Pre-training Epoch {epoch}, Loss: {loss.item():.4f}")
                 self.logger.add_scalar('diffusion_pretrain_loss', loss.item(), global_step)
                 global_step += 1
+                
+            avg_diff_loss = epoch_diff_loss / len(self.train_loader)
+            print(f"Epoch {epoch} average diffusion loss: {avg_diff_loss:.4f}")
         
         # Phase 2: Joint training
         print("Starting joint training phase...")
         for epoch in range(self.diffusion_pretraining_epochs, self.epochs):
-
-
             self.diffusion_model.train()
             self.classification_model.train()
-
+            
             pbar = tqdm(self.train_loader)
-
+            epoch_cls_loss = 0
             
             for batch_idx, (encoder_inputs, labels) in enumerate(pbar):
-                # Generate augmented data
+                # 清空所有梯度
+                self.diffusion_optimizer.zero_grad()
+                self.classification_optimizer.zero_grad()
 
-                augmented_data, augmented_targets = self.generate_augmented_data(encoder_inputs)
-
-                
-                # Train classification model
-                class_loss, outputs = self.train_classification_step(encoder_inputs, labels)
-
-                class_loss.backward()
-                self.classification_optimizer.step()
-                
-                
-                # Train diffusion model with both losses
+                # 计算生成loss
                 diff_loss = self.train_diffusion_step(encoder_inputs, labels)
-                aug_class_loss, _ = self.train_classification_step(augmented_data, augmented_targets)
 
-                
-                
-                total_loss = diff_loss + aug_class_loss
-                total_loss.backward()
+                diff_loss.backward()
+
                 self.diffusion_optimizer.step()
+
+                self.diffusion_optimizer.zero_grad()
+                
+                # Generate augmented data
+                augmented_data, augmented_targets = self.generate_augmented_data(encoder_inputs)
+                
+                # Concatenate original and augmented data
+                combined_data = torch.cat([encoder_inputs, augmented_data], dim=0)
+                combined_labels = torch.cat([labels, augmented_targets], dim=0)
+                
+                # 计算分类loss
+                class_loss, outputs = self.train_classification_step(combined_data, combined_labels)
+                
+                
+                class_loss.backward()
+
+                self.diffusion_optimizer.step()
+
+                # 更新两个优化器
+                self.classification_optimizer.step()
+
+                # 计算总loss并回传
+                total_loss = class_loss + diff_loss
+                
+                epoch_cls_loss += class_loss.item()
                 
                 pbar.set_description(
                     f"Joint Training Epoch {epoch}, "
                     f"Class Loss: {class_loss.item():.4f}, "
-                    f"Diff Loss: {diff_loss.item():.4f}"
+                    f"Diff Loss: {diff_loss.item():.4f}, "
+                    f"Total Loss: {total_loss.item():.4f}"
                 )
                 
                 self.logger.add_scalar('classification_loss', class_loss.item(), global_step)
                 self.logger.add_scalar('diffusion_loss', diff_loss.item(), global_step)
+                self.logger.add_scalar('total_loss', total_loss.item(), global_step)
                 global_step += 1
+            
+            # Calculate and print average loss for this epoch
+            avg_epoch_loss = epoch_cls_loss / len(self.train_loader)
+            print(f"Epoch {epoch} average total loss: {avg_epoch_loss:.4f}")
             
             # Validation
             val_loss = self.validate()
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
+                self.best_epoch = epoch
+                # Save both models but track classification model path
+                self.best_model_path = os.path.join(
+                    "models", 
+                    self.run_name, 
+                    f"classification_epoch_{epoch}.pt"
+                )
                 self.save_models(epoch)
+            print(f"Val Loss {val_loss}")
             
             print(f"Epoch {epoch} completed in {time() - start_time:.2f}s")
-
+            
             del augmented_data
             torch.cuda.empty_cache()
+            
+            return self.best_model_path  # Return path to best model checkpoint
             
     def validate(self):
         """Validation step"""
